@@ -67,7 +67,7 @@ Other routes:
 | `DELETE` | `/v1/sessions/:id` | Log out and delete credentials |
 | `DELETE` | `/v1/sessions/:id?logout=false` | Delete local credentials without requesting WhatsApp logout |
 
-Status values include `connecting`, `waiting_for_qr_scan`, `connected`, `reconnecting`, and `logged_out`.
+Status values include `connecting`, `waiting_for_qr_scan`, `connected`, `reconnecting`, `registration_failed`, and `logged_out`.
 
 ## Server deployment
 

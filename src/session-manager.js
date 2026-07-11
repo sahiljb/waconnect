@@ -1,6 +1,7 @@
 import makeWASocket, {
   Browsers,
   DisconnectReason,
+  fetchLatestWaWebVersion,
   makeCacheableSignalKeyStore
 } from 'baileys'
 import { usePostgresAuthState } from './postgres-auth-state.js'
@@ -22,6 +23,7 @@ export class SessionManager {
     this.sessions = new Map()
     this.pending = new Map()
     this.shuttingDown = false
+    this.waVersion = null
   }
 
   validateId(id) {
@@ -34,6 +36,12 @@ export class SessionManager {
   }
 
   async initialize() {
+    const versionResult = await fetchLatestWaWebVersion({ signal: AbortSignal.timeout(10_000) })
+    this.waVersion = versionResult.version
+    this.logger.info(
+      { version: this.waVersion.join('.'), isLatest: versionResult.isLatest },
+      'Using WhatsApp Web protocol version'
+    )
     const result = await this.pool.query('SELECT session_id FROM whatsapp_sessions ORDER BY created_at')
     const restored = await Promise.allSettled(result.rows.map((row) => this.connect(row.session_id)))
     for (const outcome of restored) {
@@ -85,22 +93,25 @@ export class SessionManager {
       id,
       socket: null,
       authCreds: state.creds,
+      saveCreds,
       status: 'connecting',
       qr: null,
       lastError: null,
       reconnectTimer: null,
       generation: (previous?.generation ?? 0) + 1,
+      pairingCooldownUntil: previous?.pairingCooldownUntil ?? 0,
       updatedAt: new Date().toISOString()
     }
     this.sessions.set(id, session)
     this.#persistStatus(session)
 
     const socket = makeWASocket({
+      version: this.waVersion,
       auth: {
         creds: state.creds,
         keys: makeCacheableSignalKeyStore(state.keys, this.logger)
       },
-      browser: Browsers.ubuntu('Chrome'),
+      browser: Browsers.windows('Chrome'),
       logger: this.logger,
       markOnlineOnConnect: false,
       syncFullHistory: false,
@@ -144,9 +155,10 @@ export class SessionManager {
     session.qr = null
     session.lastError = update.lastDisconnect?.error?.message ?? 'Connection closed'
 
-    if (code === DisconnectReason.loggedOut) {
-      session.status = 'logged_out'
-      this.logger.warn({ sessionId: session.id }, 'WhatsApp session logged out')
+    const registrationRejected = !session.authCreds.registered && [401, 403, 405, 419].includes(code)
+    if (code === DisconnectReason.loggedOut || registrationRejected) {
+      session.status = registrationRejected ? 'registration_failed' : 'logged_out'
+      this.logger.warn({ sessionId: session.id, code }, 'WhatsApp session registration closed')
       this.#persistStatus(session)
       return
     }
@@ -186,7 +198,45 @@ export class SessionManager {
       error.statusCode = 409
       throw error
     }
-    return session.socket.requestPairingCode(normalized)
+
+    const cooldownMs = session.pairingCooldownUntil - Date.now()
+    if (cooldownMs > 0) {
+      const error = new Error(`Pairing retry is available in ${Math.ceil(cooldownMs / 1000)} seconds`)
+      error.statusCode = 429
+      throw error
+    }
+
+    const ready = await this.#waitForPairingReady(session, 20_000)
+    if (!ready) {
+      const error = new Error(`WhatsApp socket is not ready for pairing (status: ${session.status})`)
+      error.statusCode = 503
+      throw error
+    }
+
+    try {
+      return await session.socket.requestPairingCode(normalized)
+    } catch (cause) {
+      session.pairingCooldownUntil = Date.now() + 10_000
+      session.authCreds.me = undefined
+      session.authCreds.pairingCode = undefined
+      await session.saveCreds().catch((error) => {
+        this.logger.error({ error, sessionId: id }, 'Could not clear incomplete pairing credentials')
+      })
+      const error = new Error(`WhatsApp rejected the pairing request: ${cause?.message ?? 'connection failed'}`)
+      error.statusCode = 502
+      error.cause = cause
+      throw error
+    }
+  }
+
+  async #waitForPairingReady(session, timeoutMs) {
+    const deadline = Date.now() + timeoutMs
+    while (Date.now() < deadline) {
+      if (session.qr || session.status === 'connected') return true
+      if (['logged_out', 'registration_failed'].includes(session.status)) return false
+      await new Promise((resolve) => setTimeout(resolve, 250))
+    }
+    return false
   }
 
   async remove(id, { logout = true } = {}) {
