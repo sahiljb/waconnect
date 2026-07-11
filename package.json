@@ -1,0 +1,23 @@
+{
+  "name": "waconnect",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Multi-account WhatsApp connection API powered by Baileys",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js",
+    "check": "node --check src/server.js && node --check src/session-manager.js && node --check src/database.js && node --check src/postgres-auth-state.js",
+    "test": "node --test"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "baileys": "^7.0.0-rc13",
+    "express": "^5.1.0",
+    "pg": "^8.22.0",
+    "pino": "^9.7.0"
+  }
+}
