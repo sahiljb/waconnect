@@ -111,7 +111,7 @@ Common content examples:
 ```
 
 ```json
-{ "document": { "url": "https://example.com/report.pdf" }, "mimetype": "application/pdf", "fileName": "report.pdf", "caption": "Report" }
+{ "document": { "url": "https://example.com/report.pdf" }, "mimetype": "application/pdf", "fileName": "report.pdf", "caption": "Report", "thumbnailUrl": "https://example.com/report-preview.jpg", "pageCount": 4 }
 ```
 
 ```json
@@ -145,6 +145,8 @@ Common content examples:
 Additional supported content includes events, albums, forwarding, editing (`edit`), view-once media, group invites, products, phone-number sharing/requests, pinning, list/button replies, and sharing limits. Pass these using Baileys' `AnyMessageContent` JSON shape. Options support quoted messages, ephemeral expiration, upload timeout, broadcast/status recipients, background color, font, timestamp, cached group metadata, and a custom message ID.
 
 For media, send an HTTPS URL object as shown above. Node.js streams cannot be represented through JSON. Advanced Baileys payloads containing binary fields may use Baileys' serialized buffer form: `{ "type": "Buffer", "data": "BASE64" }`. The total HTTP body is limited to 256 KB, so media itself should always be supplied by URL.
+
+Baileys does not generate PDF thumbnails automatically. For a PDF preview before download, provide `thumbnailUrl` as an HTTPS JPEG of at most 200 KB, or provide `jpegThumbnail` as a base64-encoded JPEG string. `pageCount` is optional but recommended. The API downloads the thumbnail and attaches it to WhatsApp's document metadata; `thumbnailUrl` itself is not sent to WhatsApp.
 
 ## Server deployment
 

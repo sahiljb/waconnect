@@ -25,7 +25,7 @@ const normalizeRecipient = (recipient) => {
   return null
 }
 
-const normalizeMessageInput = (content, options) => {
+const normalizeMessageInput = async (content, options) => {
   const normalizedContent = JSON.parse(JSON.stringify(content), BufferJSON.reviver)
   const normalizedOptions = JSON.parse(JSON.stringify(options ?? {}), BufferJSON.reviver)
 
@@ -35,6 +35,50 @@ const normalizeMessageInput = (content, options) => {
   }
   if (typeof normalizedContent.poll?.messageSecret === 'string') {
     normalizedContent.poll.messageSecret = Buffer.from(normalizedContent.poll.messageSecret, 'base64')
+  }
+  if (normalizedContent.document) {
+    if (typeof normalizedContent.jpegThumbnail === 'string') {
+      normalizedContent.jpegThumbnail = Buffer.from(normalizedContent.jpegThumbnail, 'base64')
+    }
+    if (normalizedContent.thumbnailUrl) {
+      let thumbnailUrl
+      try { thumbnailUrl = new URL(normalizedContent.thumbnailUrl) } catch {
+        const error = new Error('thumbnailUrl must be a valid HTTPS URL')
+        error.statusCode = 400
+        throw error
+      }
+      if (thumbnailUrl.protocol !== 'https:') {
+        const error = new Error('thumbnailUrl must use HTTPS')
+        error.statusCode = 400
+        throw error
+      }
+      const response = await fetch(thumbnailUrl, { signal: AbortSignal.timeout(10_000) })
+      if (!response.ok) {
+        const error = new Error(`Could not download document thumbnail (HTTP ${response.status})`)
+        error.statusCode = 400
+        throw error
+      }
+      const contentType = response.headers.get('content-type') ?? ''
+      if (!contentType.startsWith('image/jpeg')) {
+        const error = new Error('thumbnailUrl must return a JPEG image')
+        error.statusCode = 400
+        throw error
+      }
+      const declaredSize = Number(response.headers.get('content-length') ?? 0)
+      if (declaredSize > 200 * 1024) {
+        const error = new Error('Document thumbnail must not exceed 200 KB')
+        error.statusCode = 400
+        throw error
+      }
+      const thumbnail = Buffer.from(await response.arrayBuffer())
+      if (thumbnail.length === 0 || thumbnail.length > 200 * 1024) {
+        const error = new Error('Document thumbnail must be a non-empty JPEG of at most 200 KB')
+        error.statusCode = 400
+        throw error
+      }
+      normalizedContent.jpegThumbnail = thumbnail
+      delete normalizedContent.thumbnailUrl
+    }
   }
   if (normalizedOptions.timestamp) normalizedOptions.timestamp = new Date(normalizedOptions.timestamp)
 
@@ -284,7 +328,7 @@ export class SessionManager {
       throw error
     }
 
-    const normalized = normalizeMessageInput(content, options)
+    const normalized = await normalizeMessageInput(content, options)
     try {
       const message = await session.socket.sendMessage(jid, normalized.content, normalized.options)
       if (!message?.key) throw new Error('WhatsApp did not return a message key')
