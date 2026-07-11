@@ -84,6 +84,7 @@ export class SessionManager {
     const session = {
       id,
       socket: null,
+      authCreds: state.creds,
       status: 'connecting',
       qr: null,
       lastError: null,
@@ -180,7 +181,7 @@ export class SessionManager {
     }
 
     const session = await this.connect(id)
-    if (session.socket.authState?.creds?.registered || session.socket.user) {
+    if (session.authCreds.registered) {
       const error = new Error('Session is already registered')
       error.statusCode = 409
       throw error
