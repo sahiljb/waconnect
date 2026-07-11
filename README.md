@@ -98,6 +98,18 @@ Common content examples:
 { "text": "Hello", "mentions": ["919876543210@s.whatsapp.net"] }
 ```
 
+Plain text can optionally use API-level header and footer formatting:
+
+```json
+{
+  "header": "Solar Quotation Update",
+  "text": "Hello Sahil,\n\nYour quotation is ready for review.",
+  "footer": "Rudra Corporation"
+}
+```
+
+WhatsApp does not provide native header/footer fields for plain text. The API converts this to a standard WhatsApp text message with a bold header and italic footer separated from the body by blank lines.
+
 ```json
 { "image": { "url": "https://example.com/photo.jpg" }, "caption": "Photo" }
 ```

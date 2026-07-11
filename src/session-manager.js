@@ -29,6 +29,16 @@ const normalizeMessageInput = async (content, options) => {
   const normalizedContent = JSON.parse(JSON.stringify(content), BufferJSON.reviver)
   const normalizedOptions = JSON.parse(JSON.stringify(options ?? {}), BufferJSON.reviver)
 
+  if (typeof normalizedContent.text === 'string' && (normalizedContent.header || normalizedContent.footer)) {
+    const parts = []
+    if (normalizedContent.header) parts.push(`*${String(normalizedContent.header).trim()}*`)
+    if (normalizedContent.text.trim()) parts.push(normalizedContent.text.trim())
+    if (normalizedContent.footer) parts.push(`_${String(normalizedContent.footer).trim()}_`)
+    normalizedContent.text = parts.join('\n\n')
+    delete normalizedContent.header
+    delete normalizedContent.footer
+  }
+
   if (normalizedContent.event) {
     normalizedContent.event.startDate = new Date(normalizedContent.event.startDate)
     if (normalizedContent.event.endDate) normalizedContent.event.endDate = new Date(normalizedContent.event.endDate)
@@ -319,6 +329,21 @@ export class SessionManager {
     }
     if (!content || typeof content !== 'object' || Array.isArray(content) || Object.keys(content).length === 0) {
       const error = new Error('content must be a non-empty Baileys message content object')
+      error.statusCode = 400
+      throw error
+    }
+    if ('header' in content && typeof content.header !== 'string') {
+      const error = new Error('content.header must be a string')
+      error.statusCode = 400
+      throw error
+    }
+    if ('footer' in content && typeof content.footer !== 'string') {
+      const error = new Error('content.footer must be a string')
+      error.statusCode = 400
+      throw error
+    }
+    if (('header' in content || 'footer' in content) && typeof content.text !== 'string') {
+      const error = new Error('content.header and content.footer can only be used with a text message')
       error.statusCode = 400
       throw error
     }
