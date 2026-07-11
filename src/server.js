@@ -26,7 +26,7 @@ await manager.initialize()
 
 const app = express()
 app.disable('x-powered-by')
-app.use(express.json({ limit: '32kb' }))
+app.use(express.json({ limit: '256kb' }))
 
 app.get('/health', async (_request, response) => {
   try {
@@ -90,6 +90,18 @@ app.post('/v1/sessions/:sessionId/reconnect', async (request, response, next) =>
     existing.status = 'disconnected'
     const session = await manager.connect(request.params.sessionId)
     response.status(202).json(manager.serialize(session))
+  } catch (error) { next(error) }
+})
+
+app.post('/v1/sessions/:sessionId/messages', async (request, response, next) => {
+  try {
+    const result = await manager.sendMessage(
+      request.params.sessionId,
+      request.body?.to,
+      request.body?.content,
+      request.body?.options
+    )
+    response.status(201).json(result)
   } catch (error) { next(error) }
 })
 

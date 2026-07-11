@@ -1,4 +1,5 @@
 import makeWASocket, {
+  BufferJSON,
   Browsers,
   DisconnectReason,
   fetchLatestWaWebVersion,
@@ -15,6 +16,30 @@ const publicUser = (user) => user ? {
 
 const disconnectCode = (error) =>
   error?.output?.statusCode ?? error?.statusCode ?? error?.data?.statusCode ?? null
+
+const normalizeRecipient = (recipient) => {
+  if (typeof recipient !== 'string') return null
+  const value = recipient.trim()
+  if (/^\d{8,15}$/.test(value)) return `${value}@s.whatsapp.net`
+  if (/^[a-zA-Z0-9._:-]+@(s\.whatsapp\.net|lid|g\.us|broadcast|newsletter)$/.test(value)) return value
+  return null
+}
+
+const normalizeMessageInput = (content, options) => {
+  const normalizedContent = JSON.parse(JSON.stringify(content), BufferJSON.reviver)
+  const normalizedOptions = JSON.parse(JSON.stringify(options ?? {}), BufferJSON.reviver)
+
+  if (normalizedContent.event) {
+    normalizedContent.event.startDate = new Date(normalizedContent.event.startDate)
+    if (normalizedContent.event.endDate) normalizedContent.event.endDate = new Date(normalizedContent.event.endDate)
+  }
+  if (typeof normalizedContent.poll?.messageSecret === 'string') {
+    normalizedContent.poll.messageSecret = Buffer.from(normalizedContent.poll.messageSecret, 'base64')
+  }
+  if (normalizedOptions.timestamp) normalizedOptions.timestamp = new Date(normalizedOptions.timestamp)
+
+  return { content: normalizedContent, options: normalizedOptions }
+}
 
 export class SessionManager {
   constructor({ pool, logger }) {
@@ -223,6 +248,55 @@ export class SessionManager {
         this.logger.error({ error, sessionId: id }, 'Could not clear incomplete pairing credentials')
       })
       const error = new Error(`WhatsApp rejected the pairing request: ${cause?.message ?? 'connection failed'}`)
+      error.statusCode = 502
+      error.cause = cause
+      throw error
+    }
+  }
+
+  async sendMessage(id, recipient, content, options = {}) {
+    const session = this.get(id)
+    if (!session) {
+      const error = new Error('Session not found')
+      error.statusCode = 404
+      throw error
+    }
+    if (session.status !== 'connected') {
+      const error = new Error(`Session is not connected (status: ${session.status})`)
+      error.statusCode = 409
+      throw error
+    }
+
+    const jid = normalizeRecipient(recipient)
+    if (!jid) {
+      const error = new Error('to must be an international phone number or a valid WhatsApp JID')
+      error.statusCode = 400
+      throw error
+    }
+    if (!content || typeof content !== 'object' || Array.isArray(content) || Object.keys(content).length === 0) {
+      const error = new Error('content must be a non-empty Baileys message content object')
+      error.statusCode = 400
+      throw error
+    }
+    if (!options || typeof options !== 'object' || Array.isArray(options)) {
+      const error = new Error('options must be an object')
+      error.statusCode = 400
+      throw error
+    }
+
+    const normalized = normalizeMessageInput(content, options)
+    try {
+      const message = await session.socket.sendMessage(jid, normalized.content, normalized.options)
+      if (!message?.key) throw new Error('WhatsApp did not return a message key')
+      return {
+        sessionId: id,
+        to: jid,
+        messageId: message.key.id ?? null,
+        key: message.key,
+        status: 'sent'
+      }
+    } catch (cause) {
+      const error = new Error(`WhatsApp message send failed: ${cause?.message ?? 'unknown error'}`)
       error.statusCode = 502
       error.cause = cause
       throw error

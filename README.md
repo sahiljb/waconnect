@@ -64,10 +64,87 @@ Other routes:
 | `GET` | `/v1/sessions` | List connection states |
 | `GET` | `/v1/sessions/:id` | Read one connection state |
 | `POST` | `/v1/sessions/:id/reconnect` | Force a reconnect |
+| `POST` | `/v1/sessions/:id/messages` | Send any Baileys-supported message content |
 | `DELETE` | `/v1/sessions/:id` | Log out and delete credentials |
 | `DELETE` | `/v1/sessions/:id?logout=false` | Delete local credentials without requesting WhatsApp logout |
 
 Status values include `connecting`, `waiting_for_qr_scan`, `connected`, `reconnecting`, `registration_failed`, and `logged_out`.
+
+## Send messages
+
+All message types supported by Baileys' public `sendMessage` API use one route:
+
+```http
+POST /v1/sessions/:sessionId/messages
+X-API-Key: your-api-key
+Content-Type: application/json
+```
+
+The request shape is:
+
+```json
+{
+  "to": "919876543210",
+  "content": { "text": "Hello from Baileys" },
+  "options": {}
+}
+```
+
+`to` accepts an international phone number (digits with country code) or a complete WhatsApp JID such as `120363000000000000@g.us`. The session must have status `connected`.
+
+Common content examples:
+
+```json
+{ "text": "Hello", "mentions": ["919876543210@s.whatsapp.net"] }
+```
+
+```json
+{ "image": { "url": "https://example.com/photo.jpg" }, "caption": "Photo" }
+```
+
+```json
+{ "video": { "url": "https://example.com/video.mp4" }, "caption": "Video", "gifPlayback": false }
+```
+
+```json
+{ "audio": { "url": "https://example.com/audio.ogg" }, "mimetype": "audio/ogg; codecs=opus", "ptt": true }
+```
+
+```json
+{ "document": { "url": "https://example.com/report.pdf" }, "mimetype": "application/pdf", "fileName": "report.pdf", "caption": "Report" }
+```
+
+```json
+{ "sticker": { "url": "https://example.com/sticker.webp" } }
+```
+
+```json
+{ "location": { "degreesLatitude": 28.6139, "degreesLongitude": 77.209, "name": "New Delhi" } }
+```
+
+```json
+{ "contacts": { "displayName": "Support", "contacts": [{ "displayName": "Support", "vcard": "BEGIN:VCARD\nVERSION:3.0\nFN:Support\nTEL;type=CELL;waid=919876543210:+91 98765 43210\nEND:VCARD" }] } }
+```
+
+```json
+{ "poll": { "name": "Choose one", "values": ["First", "Second"], "selectableCount": 1 } }
+```
+
+```json
+{ "react": { "text": "👍", "key": { "remoteJid": "919876543210@s.whatsapp.net", "id": "MESSAGE_ID", "fromMe": false } } }
+```
+
+```json
+{ "delete": { "remoteJid": "919876543210@s.whatsapp.net", "id": "MESSAGE_ID", "fromMe": true } }
+```
+
+```json
+{ "disappearingMessagesInChat": 86400 }
+```
+
+Additional supported content includes events, albums, forwarding, editing (`edit`), view-once media, group invites, products, phone-number sharing/requests, pinning, list/button replies, and sharing limits. Pass these using Baileys' `AnyMessageContent` JSON shape. Options support quoted messages, ephemeral expiration, upload timeout, broadcast/status recipients, background color, font, timestamp, cached group metadata, and a custom message ID.
+
+For media, send an HTTPS URL object as shown above. Node.js streams cannot be represented through JSON. Advanced Baileys payloads containing binary fields may use Baileys' serialized buffer form: `{ "type": "Buffer", "data": "BASE64" }`. The total HTTP body is limited to 256 KB, so media itself should always be supplied by URL.
 
 ## Server deployment
 
