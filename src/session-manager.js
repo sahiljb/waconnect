@@ -17,6 +17,16 @@ const publicUser = (user) => user ? {
 const disconnectCode = (error) =>
   error?.output?.statusCode ?? error?.statusCode ?? error?.data?.statusCode ?? null
 
+const phoneFromJid = (jid) => {
+  const value = String(jid ?? '').split('@')[0].split(':')[0]
+  return /^\d{8,15}$/.test(value) ? value : null
+}
+
+const usableName = (name) => {
+  if (typeof name !== 'string' || !name.trim()) return null
+  return /[∙•]{3,}/.test(name) ? null : name.trim()
+}
+
 const normalizeRecipient = (recipient) => {
   if (typeof recipient !== 'string') return null
   const value = recipient.trim()
@@ -209,15 +219,35 @@ export class SessionManager {
     })
     socket.ev.on('contacts.upsert', (contacts) => this.#mergeContacts(session, contacts))
     socket.ev.on('contacts.update', (contacts) => this.#mergeContacts(session, contacts))
-    socket.ev.on('messaging-history.set', ({ contacts }) => this.#mergeContacts(session, contacts))
+    socket.ev.on('messaging-history.set', ({ contacts, chats, messages }) => {
+      this.#mergeContacts(session, contacts)
+      this.#mergeChats(session, chats)
+      this.#mergeMessages(session, messages)
+    })
+    socket.ev.on('messages.upsert', ({ messages }) => this.#mergeMessages(session, messages))
 
     return session
   }
 
   #mergeContacts(session, contacts = []) {
     for (const contact of contacts) {
-      if (!contact?.id) continue
+      if (!contact?.id || contact.id.endsWith('@g.us') || contact.id.endsWith('@broadcast')) continue
       session.contacts.set(contact.id, { ...(session.contacts.get(contact.id) ?? {}), ...contact })
+    }
+  }
+
+  #mergeChats(session, chats = []) {
+    for (const chat of chats) {
+      if (!phoneFromJid(chat?.id)) continue
+      this.#mergeContacts(session, [{ id: chat.id, name: usableName(chat.name) ?? undefined }])
+    }
+  }
+
+  #mergeMessages(session, messages = []) {
+    for (const message of messages) {
+      const jid = message?.key?.participant || message?.key?.remoteJid
+      if (!phoneFromJid(jid)) continue
+      this.#mergeContacts(session, [{ id: jid, notify: usableName(message.pushName) ?? undefined }])
     }
   }
 
@@ -236,10 +266,10 @@ export class SessionManager {
     return [...session.contacts.values()].map((contact) => ({
       id: contact.id,
       lid: contact.lid ?? null,
-      phoneNumber: contact.phoneNumber ?? null,
-      name: contact.name ?? null,
-      notify: contact.notify ?? null,
-      verifiedName: contact.verifiedName ?? null,
+      phoneNumber: phoneFromJid(contact.phoneNumber) ?? phoneFromJid(contact.id),
+      name: usableName(contact.name),
+      notify: usableName(contact.notify),
+      verifiedName: usableName(contact.verifiedName),
       imgUrl: contact.imgUrl ?? null,
       status: contact.status ?? null
     }))
