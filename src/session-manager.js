@@ -191,10 +191,10 @@ export class SessionManager {
         creds: state.creds,
         keys: makeCacheableSignalKeyStore(state.keys, this.logger)
       },
-      browser: Browsers.windows('Chrome'),
+      browser: Browsers.windows('Desktop'),
       logger: this.logger,
       markOnlineOnConnect: false,
-      syncFullHistory: false,
+      syncFullHistory: true,
       generateHighQualityLinkPreview: false
     })
     session.socket = socket
