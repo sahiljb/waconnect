@@ -191,7 +191,7 @@ export class SessionManager {
         creds: state.creds,
         keys: makeCacheableSignalKeyStore(state.keys, this.logger)
       },
-      browser: Browsers.windows('Desktop'),
+      browser: Browsers.windows('Chrome'),
       logger: this.logger,
       markOnlineOnConnect: false,
       syncFullHistory: true,
