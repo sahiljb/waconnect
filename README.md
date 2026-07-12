@@ -65,6 +65,7 @@ Other routes:
 | `GET` | `/v1/sessions/:id` | Read one connection state |
 | `POST` | `/v1/sessions/:id/reconnect` | Force a reconnect |
 | `POST` | `/v1/sessions/:id/messages` | Send any Baileys-supported message content |
+| `GET` | `/v1/sessions/:id/contacts` | Export the active session contact snapshot |
 | `DELETE` | `/v1/sessions/:id` | Log out and delete credentials |
 | `DELETE` | `/v1/sessions/:id?logout=false` | Delete local credentials without requesting WhatsApp logout |
 

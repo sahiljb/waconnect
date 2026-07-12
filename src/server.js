@@ -105,6 +105,13 @@ app.post('/v1/sessions/:sessionId/messages', async (request, response, next) => 
   } catch (error) { next(error) }
 })
 
+app.get('/v1/sessions/:sessionId/contacts', (request, response, next) => {
+  try {
+    const contacts = manager.getContacts(request.params.sessionId)
+    response.set('Cache-Control', 'no-store').json({ sessionId: request.params.sessionId, contacts })
+  } catch (error) { next(error) }
+})
+
 app.delete('/v1/sessions/:sessionId', async (request, response, next) => {
   try {
     const removed = await manager.remove(request.params.sessionId, { logout: request.query.logout !== 'false' })

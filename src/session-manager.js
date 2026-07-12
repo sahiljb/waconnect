@@ -179,6 +179,7 @@ export class SessionManager {
       reconnectTimer: null,
       generation: (previous?.generation ?? 0) + 1,
       pairingCooldownUntil: previous?.pairingCooldownUntil ?? 0,
+      contacts: previous?.contacts ?? new Map(),
       updatedAt: new Date().toISOString()
     }
     this.sessions.set(id, session)
@@ -206,8 +207,42 @@ export class SessionManager {
       if (this.sessions.get(id)?.generation !== generation) return
       this.#handleConnectionUpdate(session, update)
     })
+    socket.ev.on('contacts.upsert', (contacts) => this.#mergeContacts(session, contacts))
+    socket.ev.on('contacts.update', (contacts) => this.#mergeContacts(session, contacts))
+    socket.ev.on('messaging-history.set', ({ contacts }) => this.#mergeContacts(session, contacts))
 
     return session
+  }
+
+  #mergeContacts(session, contacts = []) {
+    for (const contact of contacts) {
+      if (!contact?.id) continue
+      session.contacts.set(contact.id, { ...(session.contacts.get(contact.id) ?? {}), ...contact })
+    }
+  }
+
+  getContacts(id) {
+    const session = this.get(id)
+    if (!session) {
+      const error = new Error('Session not found')
+      error.statusCode = 404
+      throw error
+    }
+    if (session.status !== 'connected') {
+      const error = new Error(`Session is not connected (status: ${session.status})`)
+      error.statusCode = 409
+      throw error
+    }
+    return [...session.contacts.values()].map((contact) => ({
+      id: contact.id,
+      lid: contact.lid ?? null,
+      phoneNumber: contact.phoneNumber ?? null,
+      name: contact.name ?? null,
+      notify: contact.notify ?? null,
+      verifiedName: contact.verifiedName ?? null,
+      imgUrl: contact.imgUrl ?? null,
+      status: contact.status ?? null
+    }))
   }
 
   #handleConnectionUpdate(session, update) {
