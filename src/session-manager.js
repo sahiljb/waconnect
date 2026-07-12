@@ -194,7 +194,7 @@ export class SessionManager {
       browser: Browsers.windows('Chrome'),
       logger: this.logger,
       markOnlineOnConnect: false,
-      syncFullHistory: true,
+      syncFullHistory: false,
       generateHighQualityLinkPreview: false
     })
     session.socket = socket
